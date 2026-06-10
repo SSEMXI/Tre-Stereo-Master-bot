@@ -2,6 +2,8 @@
 Configuration file for TRE BOT Discord Audio Services Bot
 """
 
+import os
+
 # Audio Service Packages
 PACKAGES = {
     "stereo_mastering": {
@@ -47,3 +49,13 @@ PACKAGES = {
 
 # Discord Bot Settings
 COMMAND_PREFIX = "!"
+
+# Owner Discord user ID — set OWNER_DISCORD_ID in your .env file
+OWNER_ID = int(os.getenv("OWNER_DISCORD_ID", "0"))
+
+# Payment information — set these in your .env file
+PAYMENT_INFO = {
+    "venmo": os.getenv("VENMO_HANDLE", "@YourVenmo"),
+    "zelle": os.getenv("ZELLE_INFO", "your@email.com or phone"),
+    "paypal": os.getenv("PAYPAL_LINK", "paypal.me/YourLink"),
+}
