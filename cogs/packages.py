@@ -61,10 +61,6 @@ class PaymentMethodView(ui.View):
     async def venmo(self, interaction: discord.Interaction, button: ui.Button):
         await self._handle(interaction, "Venmo")
 
-    @ui.button(label="Zelle", style=discord.ButtonStyle.success, emoji="🏦")
-    async def zelle(self, interaction: discord.Interaction, button: ui.Button):
-        await self._handle(interaction, "Zelle")
-
     @ui.button(label="PayPal", style=discord.ButtonStyle.secondary, emoji="💳")
     async def paypal(self, interaction: discord.Interaction, button: ui.Button):
         await self._handle(interaction, "PayPal")
