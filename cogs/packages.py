@@ -13,6 +13,88 @@ from config import OWNER_ID, PACKAGES, PAYMENT_INFO
 
 
 # ---------------------------------------------------------------------------
+# Owner approval view (sent to owner's DM after customer confirms payment)
+# ---------------------------------------------------------------------------
+
+class OwnerApprovalView(ui.View):
+    def __init__(self, customer: discord.User, booking_data: dict, customer_message: discord.Message):
+        super().__init__(timeout=None)  # No timeout — owner can approve anytime
+        self.customer = customer
+        self.booking_data = booking_data
+        self.customer_message = customer_message
+
+    @ui.button(label="✅ Approve", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, button: ui.Button):
+        now = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
+        method = self.booking_data.get("payment_method", "Unknown")
+
+        # Update owner's message to show approved
+        approved_embed = discord.Embed(
+            title="✅ Booking Approved",
+            color=discord.Color.green()
+        )
+        approved_embed.add_field(name="👤 Customer", value=f"{self.customer}", inline=True)
+        approved_embed.add_field(name="📦 Package", value=self.booking_data["package_name"], inline=True)
+        approved_embed.add_field(name="🎤 Artist", value=self.booking_data["artist_name"], inline=True)
+        approved_embed.add_field(name="🎵 Songs", value=str(self.booking_data["num_songs"]), inline=True)
+        approved_embed.add_field(name="⏱️ Turnaround", value=self.booking_data["turnaround"], inline=True)
+        approved_embed.add_field(name="💳 Payment", value=f"{method} — {self.booking_data['currency']}{self.booking_data['total']}", inline=True)
+        approved_embed.set_footer(text=f"Approved: {now}")
+        await interaction.response.edit_message(embed=approved_embed, view=None)
+
+        # Send receipt to customer
+        receipt = discord.Embed(
+            title="✅ Booking Confirmed — TRE Audio Services",
+            description=(
+                "Your booking has been **confirmed**! 🎧\n"
+                "We'll get started on your order and reach out with any updates."
+            ),
+            color=discord.Color.green()
+        )
+        receipt.add_field(name="📦 Package", value=self.booking_data["package_name"], inline=True)
+        receipt.add_field(name="🎤 Artist", value=self.booking_data["artist_name"], inline=True)
+        receipt.add_field(name="🎵 Songs", value=str(self.booking_data["num_songs"]), inline=True)
+        receipt.add_field(name="⏱️ Turnaround", value=self.booking_data["turnaround"], inline=True)
+        receipt.add_field(name="💳 Payment Method", value=method, inline=True)
+        receipt.add_field(name="💰 Amount", value=f"{self.booking_data['currency']}{self.booking_data['total']}", inline=True)
+        receipt.add_field(name="📁 Files", value="\n".join(self.booking_data["file_names"]), inline=False)
+        receipt.set_footer(text=f"Confirmed: {now}")
+
+        try:
+            await self.customer_message.edit(embed=receipt, view=None)
+        except discord.NotFound:
+            await self.customer.send(embed=receipt)
+
+    @ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, button: ui.Button):
+        now = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
+
+        # Update owner's message to show declined
+        declined_embed = discord.Embed(
+            title="❌ Booking Declined",
+            color=discord.Color.red()
+        )
+        declined_embed.add_field(name="👤 Customer", value=f"{self.customer}", inline=True)
+        declined_embed.add_field(name="📦 Package", value=self.booking_data["package_name"], inline=True)
+        declined_embed.set_footer(text=f"Declined: {now}")
+        await interaction.response.edit_message(embed=declined_embed, view=None)
+
+        # Notify customer of decline
+        declined_customer = discord.Embed(
+            title="❌ Booking Not Confirmed — TRE Audio Services",
+            description=(
+                "Unfortunately your booking could **not** be confirmed at this time.\n"
+                "Please reach out to the studio directly for more information."
+            ),
+            color=discord.Color.red()
+        )
+        try:
+            await self.customer_message.edit(embed=declined_customer, view=None)
+        except discord.NotFound:
+            await self.customer.send(embed=declined_customer)
+
+
+# ---------------------------------------------------------------------------
 # Package selection view (shown in the server channel)
 # ---------------------------------------------------------------------------
 
@@ -276,36 +358,36 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
         booking_data: dict,
         message: discord.Message
     ):
-        """Send receipt to customer and notify the owner."""
+        """Notify the owner to approve or decline the booking."""
         now = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
         method = booking_data.get("payment_method", "Unknown")
 
-        # Receipt for customer
-        receipt = discord.Embed(
-            title="🧾 Receipt — TRE Audio Services",
+        # Tell customer their booking is pending approval
+        pending_embed = discord.Embed(
+            title="⏳ Booking Pending Confirmation",
             description=(
-                "Thank you! Your payment confirmation has been received.\n"
-                "We'll get started on your order and reach out with updates. 🎧"
+                "Your payment has been submitted! ✅\n"
+                "The studio is reviewing your booking and will confirm shortly.\n"
+                "You'll receive a DM here once it's approved."
             ),
-            color=discord.Color.green()
+            color=discord.Color.yellow()
         )
-        receipt.add_field(name="📦 Package", value=booking_data["package_name"], inline=True)
-        receipt.add_field(name="🎤 Artist", value=booking_data["artist_name"], inline=True)
-        receipt.add_field(name="🎵 Songs", value=str(booking_data["num_songs"]), inline=True)
-        receipt.add_field(name="⏱️ Turnaround", value=booking_data["turnaround"], inline=True)
-        receipt.add_field(name="💳 Payment Method", value=method, inline=True)
-        receipt.add_field(name="💰 Amount", value=f"{booking_data['currency']}{booking_data['total']}", inline=True)
-        receipt.add_field(name="📁 Files", value="\n".join(booking_data["file_names"]), inline=False)
-        receipt.set_footer(text=f"Order confirmed: {now}")
+        pending_embed.add_field(name="📦 Package", value=booking_data["package_name"], inline=True)
+        pending_embed.add_field(name="🎤 Artist", value=booking_data["artist_name"], inline=True)
+        pending_embed.add_field(name="🎵 Songs", value=str(booking_data["num_songs"]), inline=True)
+        pending_embed.add_field(name="⏱️ Turnaround", value=booking_data["turnaround"], inline=True)
+        pending_embed.add_field(name="💳 Payment Method", value=method, inline=True)
+        pending_embed.add_field(name="💰 Amount", value=f"{booking_data['currency']}{booking_data['total']}", inline=True)
+        pending_embed.set_footer(text=f"Submitted: {now}")
+        await message.edit(embed=pending_embed, view=None)
 
-        await message.edit(embed=receipt, view=None)
-
-        # Notify owner
+        # Send approval request to owner
         if OWNER_ID:
             try:
                 owner = await self.bot.fetch_user(OWNER_ID)
                 notify = discord.Embed(
-                    title="🔔 New Order Received!",
+                    title="🔔 New Booking — Awaiting Your Approval",
+                    description="A customer has submitted a booking and confirmed payment. Approve or decline below.",
                     color=discord.Color.orange()
                 )
                 notify.add_field(name="👤 Customer", value=f"{user} (ID: {user.id})", inline=False)
@@ -327,7 +409,8 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
                 else:
                     notify.add_field(name="📁 Files", value="Customer will send files separately.", inline=False)
                 notify.set_footer(text=f"Received: {now}")
-                await owner.send(embed=notify)
+                approval_view = OwnerApprovalView(user, booking_data, message)
+                await owner.send(embed=notify, view=approval_view)
             except (discord.NotFound, discord.Forbidden):
                 pass  # Owner DM failed silently
 
