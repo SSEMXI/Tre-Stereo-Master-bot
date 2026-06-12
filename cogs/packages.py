@@ -38,7 +38,14 @@ class PackageSelect(ui.Select):
         )
         cog: PackagesCog = self.bot.get_cog("PackagesCog")
         if cog:
-            await cog.start_booking_flow(interaction.user, package)
+            success = await cog.start_booking_flow(interaction.user, package)
+            if not success:
+                await interaction.followup.send(
+                    "⚠️ I couldn't send you a DM! Please enable DMs from server members:\n"
+                    "**Right-click the server icon → Privacy Settings → turn on Direct Messages**\n"
+                    "Then select your package again.",
+                    ephemeral=True
+                )
 
 
 class PackageSelectView(ui.View):
@@ -154,7 +161,7 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
         try:
             dm = await user.create_dm()
         except discord.Forbidden:
-            return  # Can't DM the user
+            return False  # DMs are disabled
 
         def dm_check(m: discord.Message):
             return m.author.id == user.id and isinstance(m.channel, discord.DMChannel)
@@ -176,24 +183,24 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
         # 1. Artist name
         artist_name = await ask("🎤 **What is the artist name?**")
         if artist_name is None:
-            return
+            return False
 
         # 2. Number of songs
         num_songs_raw = await ask("🎵 **How many songs do you need?**")
         if num_songs_raw is None:
-            return
+            return False
         try:
             num_songs = int(num_songs_raw)
             if num_songs < 1:
                 raise ValueError
         except ValueError:
             await dm.send("❌ That doesn't look like a valid number. Use `!services` to start over.")
-            return
+            return False
 
         # 3. Turnaround time
         turnaround = await ask("⏱️ **What is your desired turnaround time?** (e.g., 3 days, 1 week)")
         if turnaround is None:
-            return
+            return False
 
         # 4. File upload
         await dm.send(
@@ -215,7 +222,7 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
                 file_urls = []
         except asyncio.TimeoutError:
             await dm.send("⏰ Your booking session timed out. Use `!services` to start over.")
-            return
+            return False
 
         # Calculate total
         if package["unit"] == "per song":
@@ -257,6 +264,7 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
         )
         view = PaymentMethodView(booking_data, self)
         await dm.send(embed=payment_embed, view=view)
+        return True
 
     # ------------------------------------------------------------------
     # Finalize booking — called after customer confirms payment
