@@ -53,6 +53,9 @@ COMMAND_PREFIX = "!"
 # Owner Discord user ID — set OWNER_DISCORD_ID in your .env file
 OWNER_ID = int(os.getenv("OWNER_DISCORD_ID", "0"))
 
+# Additional staff who can approve/decline bookings
+STAFF_IDS = [706276455444906056]
+
 # Payment information — set these in your .env file
 PAYMENT_INFO = {
     "venmo": os.getenv("VENMO_HANDLE", "@YourVenmo"),

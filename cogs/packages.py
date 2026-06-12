@@ -9,7 +9,7 @@ import discord
 from discord import ui
 from discord.ext import commands
 
-from config import OWNER_ID, PACKAGES, PAYMENT_INFO
+from config import OWNER_ID, PACKAGES, PAYMENT_INFO, STAFF_IDS
 
 
 # ---------------------------------------------------------------------------
@@ -381,38 +381,45 @@ class PackagesCog(commands.Cog, name="PackagesCog"):
         pending_embed.set_footer(text=f"Submitted: {now}")
         await message.edit(embed=pending_embed, view=None)
 
-        # Send approval request to owner
-        if OWNER_ID:
-            try:
-                owner = await self.bot.fetch_user(OWNER_ID)
-                notify = discord.Embed(
-                    title="🔔 New Booking — Awaiting Your Approval",
-                    description="A customer has submitted a booking and confirmed payment. Approve or decline below.",
-                    color=discord.Color.orange()
-                )
-                notify.add_field(name="👤 Customer", value=f"{user} (ID: {user.id})", inline=False)
-                notify.add_field(name="📦 Package", value=booking_data["package_name"], inline=True)
-                notify.add_field(name="🎤 Artist", value=booking_data["artist_name"], inline=True)
-                notify.add_field(name="🎵 Songs", value=str(booking_data["num_songs"]), inline=True)
-                notify.add_field(name="⏱️ Turnaround", value=booking_data["turnaround"], inline=True)
+        # Build the notification embed
+        def build_notify_embed():
+            notify = discord.Embed(
+                title="🔔 New Booking — Awaiting Your Approval",
+                description="A customer has submitted a booking and confirmed payment. Approve or decline below.",
+                color=discord.Color.orange()
+            )
+            notify.add_field(name="👤 Customer", value=f"{user} (ID: {user.id})", inline=False)
+            notify.add_field(name="📦 Package", value=booking_data["package_name"], inline=True)
+            notify.add_field(name="🎤 Artist", value=booking_data["artist_name"], inline=True)
+            notify.add_field(name="🎵 Songs", value=str(booking_data["num_songs"]), inline=True)
+            notify.add_field(name="⏱️ Turnaround", value=booking_data["turnaround"], inline=True)
+            notify.add_field(
+                name="💳 Payment",
+                value=f"{method} — {booking_data['currency']}{booking_data['total']}",
+                inline=True
+            )
+            if booking_data["file_urls"]:
                 notify.add_field(
-                    name="💳 Payment",
-                    value=f"{method} — {booking_data['currency']}{booking_data['total']}",
-                    inline=True
+                    name="📁 Uploaded Files",
+                    value="\n".join(booking_data["file_urls"]),
+                    inline=False
                 )
-                if booking_data["file_urls"]:
-                    notify.add_field(
-                        name="📁 Uploaded Files",
-                        value="\n".join(booking_data["file_urls"]),
-                        inline=False
-                    )
-                else:
-                    notify.add_field(name="📁 Files", value="Customer will send files separately.", inline=False)
-                notify.set_footer(text=f"Received: {now}")
+            else:
+                notify.add_field(name="📁 Files", value="Customer will send files separately.", inline=False)
+            notify.set_footer(text=f"Received: {now}")
+            return notify
+
+        # Send approval request to owner and all staff
+        recipients = list({OWNER_ID} | set(STAFF_IDS))  # deduplicate in case of overlap
+        for recipient_id in recipients:
+            if not recipient_id:
+                continue
+            try:
+                recipient = await self.bot.fetch_user(recipient_id)
                 approval_view = OwnerApprovalView(user, booking_data, message)
-                await owner.send(embed=notify, view=approval_view)
+                await recipient.send(embed=build_notify_embed(), view=approval_view)
             except (discord.NotFound, discord.Forbidden):
-                pass  # Owner DM failed silently
+                pass  # Recipient DM failed silently
 
     # ------------------------------------------------------------------
     # Help command
